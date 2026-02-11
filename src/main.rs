@@ -22,11 +22,17 @@ async fn main() {
     // Save raw fd for SIGWINCH resize (valid as long as pty halves live)
     let pty_raw_fd = pty.as_raw_fd();
 
-    let mut child = pty_process::Command::new("cursor-agent")
+    // FIXME: support overriding the cursor-agent path via an env var
+    //        (e.g. CURSOR_AGENT_PATH)
+    let cursor_agent_bin = dirs::home_dir()
+        .expect("could not determine home directory")
+        .join(".local/bin/cursor-agent");
+
+    let mut child = pty_process::Command::new(&cursor_agent_bin)
         .args(&args)
         .spawn(pts)
         .unwrap_or_else(|e| {
-            eprintln!("failed to spawn cursor-agent: {e}");
+            eprintln!("failed to spawn {}: {e}", cursor_agent_bin.display());
             std::process::exit(1);
         });
 
