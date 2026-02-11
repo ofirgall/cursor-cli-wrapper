@@ -60,7 +60,13 @@ async fn main() {
         }
     });
 
+    // Load notification config and set initial tmux status
+    let cfg = config::Config::load();
+    let hook = cfg.hooks.status_change.clone();
+    state::set_tmux_status("IDLE", hook.as_deref());
+
     // Relay stdin -> PTY
+    let stdin_hook = hook.clone();
     let _stdin_task = tokio::spawn(async move {
         let mut stdin = io::stdin();
         let mut buf = [0u8; 4096];
@@ -71,7 +77,7 @@ async fn main() {
             };
             // Detect Enter key (CR in raw mode) and set tmux status to IDLE
             if buf[..n].contains(&b'\r') {
-                state::set_tmux_status("IDLE");
+                state::set_tmux_status("IDLE", stdin_hook.as_deref());
             }
             if pty_writer.write_all(&buf[..n]).await.is_err() {
                 break;
@@ -79,11 +85,8 @@ async fn main() {
         }
     });
 
-    // Load notification config and set initial tmux status
-    let cfg = config::Config::load();
-    state::set_tmux_status("IDLE");
-
     // Relay PTY -> stdout, with output monitoring for notifications
+    let stdout_hook = hook.clone();
     let stdout_task = tokio::spawn(async move {
         let mut stdout = io::stdout();
         let mut buf = [0u8; 4096];
@@ -100,7 +103,7 @@ async fn main() {
                 Ok(Ok(n)) => {
                     let chunk = &buf[..n];
                     if monitor.process_chunk(chunk) {
-                        state::set_tmux_status("INPROGRESS");
+                        state::set_tmux_status("INPROGRESS", stdout_hook.as_deref());
                     }
 
                     if stdout.write_all(chunk).await.is_err() {
@@ -115,7 +118,7 @@ async fn main() {
 
             if monitor.check_transition() {
                 // Agent finished generating/thinking — fire notification
-                state::set_tmux_status("WAITING");
+                state::set_tmux_status("WAITING", stdout_hook.as_deref());
                 let args = cfg.general.notify_send_args();
                 let _ = tokio::process::Command::new("notify-send")
                     .args(&args)
@@ -140,7 +143,7 @@ async fn main() {
     }
 
     // Clear tmux status on exit
-    state::set_tmux_status("");
+    state::set_tmux_status("", hook.as_deref());
 
     std::process::exit(status.code().unwrap_or(1));
 }

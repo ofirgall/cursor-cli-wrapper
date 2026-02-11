@@ -35,14 +35,24 @@ impl Urgency {
 pub struct Config {
     #[serde(default)]
     pub general: General,
+
+    #[serde(default)]
+    pub hooks: Hooks,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             general: General::default(),
+            hooks: Hooks::default(),
         }
     }
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct Hooks {
+    #[serde(default, rename = "status-change")]
+    pub status_change: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

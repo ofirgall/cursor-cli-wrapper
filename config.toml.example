@@ -20,3 +20,8 @@ notification-urgency = "normal"
 # notification-app-name = "cursor-cli-wrapper"
 # Icon name or path (passed as --icon to notify-send)
 # notification-icon = "dialog-information"
+
+[hooks]
+# Shell command to run on every status change.
+# {status} is replaced with the new value (IDLE, INPROGRESS, WAITING, or empty).
+# status-change = "echo {status} >> /tmp/cursor-status.log"

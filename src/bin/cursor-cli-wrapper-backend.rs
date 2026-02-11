@@ -23,7 +23,8 @@ fn cmd_notify() {
 }
 
 fn cmd_status(value: &str) {
-    state::set_tmux_status(value);
+    let cfg = config::Config::load();
+    state::set_tmux_status(value, cfg.hooks.status_change.as_deref());
 }
 
 fn main() {
