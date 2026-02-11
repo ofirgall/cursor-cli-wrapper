@@ -1,5 +1,4 @@
-mod monitor;
-
+use cursor_cli_wrapper::{config, monitor};
 use std::io::IsTerminal;
 use std::os::fd::AsRawFd;
 use std::time::Duration;
@@ -76,6 +75,9 @@ async fn main() {
         }
     });
 
+    // Load notification config
+    let cfg = config::Config::load();
+
     // Relay PTY -> stdout, with output monitoring for notifications
     let stdout_task = tokio::spawn(async move {
         let mut stdout = io::stdout();
@@ -106,8 +108,10 @@ async fn main() {
 
             if monitor.check_transition() {
                 // Agent finished generating/thinking — fire notification
+                let title = config::resolve_placeholders(&cfg.general.notification_title);
+                let body = config::resolve_placeholders(&cfg.general.notification_body);
                 let _ = tokio::process::Command::new("notify-send")
-                    .args(["Cursor Agent", "Done"])
+                    .args([&title, &body])
                     .spawn();
             }
         }

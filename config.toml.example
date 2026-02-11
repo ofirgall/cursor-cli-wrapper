@@ -1,0 +1,16 @@
+# Cursor CLI Wrapper — Notification Config
+#
+# Place this file at:
+#   ~/.config/cursor-cli-wrapper/config.toml
+#
+# All fields are optional. Defaults are shown below.
+#
+# Supported placeholders (resolved at notification time):
+#   {cwd}           — current working directory
+#   {git_branch}    — current git branch name
+#   {git_repo}      — git repository name (top-level directory name)
+#   {tmux-session}  — current tmux session name
+
+[general]
+notification-title = "Cursor Agent"
+notification-body = "Done - {git_branch} ({cwd})"
