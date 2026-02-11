@@ -1,0 +1,21 @@
+ ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+ │ this is a prompt that running                                                                                                                                                                                                                              │
+ └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+  I think you're saying that "this" — the current AI interaction you're having right now (i.e., this Cursor AI session) — is "a prompt that's running," and you want to understand how it works?
+  If so: this is Cursor's AI assistant (Ask mode). It works by:
+  1. Receiving your messages along with context about your workspace (git status, OS, file structure).
+  2. Using tools (read files, search code, list directories, etc.) to explore your codebase.
+  3. Answering questions based on what it finds.
+
+  It does not relate to the sidekick.nvim or ChatGPT.nvim plugins in your ai.lua file — those are separate AI integrations for Neovim.
+
+
+ ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+ │ → Add a follow-up                                                                                                                                                                                                                                          │
+ └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  ◎ Ask (shift+tab to cycle)
+
+  Claude 4.6 Opus (Thinking) · 8.3%
+  / commands · @ files · ! shell
+

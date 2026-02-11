@@ -1,5 +1,8 @@
+mod monitor;
+
 use std::io::IsTerminal;
 use std::os::fd::AsRawFd;
+use std::time::Duration;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 use tokio::signal::unix::{SignalKind, signal};
 
@@ -73,19 +76,40 @@ async fn main() {
         }
     });
 
-    // Relay PTY -> stdout
+    // Relay PTY -> stdout, with output monitoring for notifications
     let stdout_task = tokio::spawn(async move {
         let mut stdout = io::stdout();
         let mut buf = [0u8; 4096];
+        let mut monitor = monitor::OutputMonitor::new();
+
         loop {
-            let n = match pty_reader.read(&mut buf).await {
-                Ok(0) | Err(_) => break,
-                Ok(n) => n,
-            };
-            if stdout.write_all(&buf[..n]).await.is_err() {
-                break;
+            // Use a timeout so we can check for state transitions
+            // even when no new data arrives from the PTY.
+            let result =
+                tokio::time::timeout(Duration::from_secs(1), pty_reader.read(&mut buf)).await;
+
+            match result {
+                Ok(Ok(0)) | Ok(Err(_)) => break,
+                Ok(Ok(n)) => {
+                    let chunk = &buf[..n];
+                    monitor.process_chunk(chunk);
+
+                    if stdout.write_all(chunk).await.is_err() {
+                        break;
+                    }
+                    let _ = stdout.flush().await;
+                }
+                Err(_timeout) => {
+                    // No data for 1s — just check for transitions below
+                }
             }
-            let _ = stdout.flush().await;
+
+            if monitor.check_transition() {
+                // Agent finished generating/thinking — fire notification
+                let _ = tokio::process::Command::new("notify-send")
+                    .args(["Cursor Agent", "Done"])
+                    .spawn();
+            }
         }
     });
 
