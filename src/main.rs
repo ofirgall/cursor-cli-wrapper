@@ -1,6 +1,7 @@
 use cursor_cli_wrapper::{config, monitor, state};
 use std::io::IsTerminal;
 use std::os::fd::AsRawFd;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 use tokio::signal::unix::{SignalKind, signal};
@@ -60,13 +61,17 @@ async fn main() {
         }
     });
 
-    // Load notification config and set initial tmux status
-    let cfg = config::Config::load();
-    let hook = cfg.hooks.status_change.clone();
-    state::set_tmux_status("IDLE", hook.as_deref());
+    // Load config into shared state and spawn file watcher
+    let cfg = Arc::new(RwLock::new(config::Config::load()));
+    {
+        let cfg = Arc::clone(&cfg);
+        tokio::spawn(config::watch_config(cfg));
+    }
+
+    state::set_tmux_status("IDLE", cfg.read().unwrap().hooks.status_change.as_deref());
 
     // Relay stdin -> PTY
-    let stdin_hook = hook.clone();
+    let stdin_cfg = Arc::clone(&cfg);
     let _stdin_task = tokio::spawn(async move {
         let mut stdin = io::stdin();
         let mut buf = [0u8; 4096];
@@ -75,10 +80,27 @@ async fn main() {
                 Ok(0) | Err(_) => break,
                 Ok(n) => n,
             };
-            // Detect Alt+I (ESC 'i' = \x1b\x69) and reset status to IDLE
+            const ALT_I: &[u8] = b"\x1bi";
+            const ESC: u8 = 0x1b;
+
             let data = &buf[..n];
-            if data.windows(2).any(|w| w == b"\x1bi") {
-                state::set_tmux_status("IDLE", stdin_hook.as_deref());
+            let cfg_snapshot = stdin_cfg.read().unwrap().clone();
+
+            // Detect Alt+I and reset status to IDLE
+            if data.windows(ALT_I.len()).any(|w| w == ALT_I) {
+                state::set_tmux_status("IDLE", cfg_snapshot.hooks.status_change.as_deref());
+            }
+
+            // Detect standalone ESC while in vim NORMAL mode and fire hook.
+            // A lone ESC is a single byte (not part of an escape sequence
+            // like Alt+key or arrow keys which arrive as multi-byte reads).
+            if n == 1
+                && data[0] == ESC
+                && state::get_vim_mode() == state::VimMode::Normal
+            {
+                if let Some(ref cmd) = cfg_snapshot.hooks.esc_in_normal {
+                    state::run_hook(cmd);
+                }
             }
             if pty_writer.write_all(data).await.is_err() {
                 break;
@@ -87,7 +109,7 @@ async fn main() {
     });
 
     // Relay PTY -> stdout, with output monitoring for notifications
-    let stdout_hook = hook.clone();
+    let stdout_cfg = Arc::clone(&cfg);
     let stdout_task = tokio::spawn(async move {
         let mut stdout = io::stdout();
         let mut buf = [0u8; 4096];
@@ -104,7 +126,8 @@ async fn main() {
                 Ok(Ok(n)) => {
                     let chunk = &buf[..n];
                     if monitor.process_chunk(chunk) {
-                        state::set_tmux_status("INPROGRESS", stdout_hook.as_deref());
+                        let hook = stdout_cfg.read().unwrap().hooks.status_change.clone();
+                        state::set_tmux_status("INPROGRESS", hook.as_deref());
                     }
 
                     if stdout.write_all(chunk).await.is_err() {
@@ -119,8 +142,9 @@ async fn main() {
 
             if monitor.check_transition() {
                 // Agent finished generating/thinking — fire notification
-                state::set_tmux_status("WAITING", stdout_hook.as_deref());
-                let args = cfg.general.notify_send_args();
+                let cfg_snapshot = stdout_cfg.read().unwrap().clone();
+                state::set_tmux_status("WAITING", cfg_snapshot.hooks.status_change.as_deref());
+                let args = cfg_snapshot.general.notify_send_args();
                 let _ = tokio::process::Command::new("notify-send")
                     .args(&args)
                     .spawn();
@@ -144,7 +168,7 @@ async fn main() {
     }
 
     // Clear tmux status on exit
-    state::set_tmux_status("", hook.as_deref());
+    state::set_tmux_status("", cfg.read().unwrap().hooks.status_change.as_deref());
 
     std::process::exit(status.code().unwrap_or(1));
 }

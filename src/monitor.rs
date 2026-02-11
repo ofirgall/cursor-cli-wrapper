@@ -1,6 +1,16 @@
+use crate::state::{self, VimMode};
 use std::time::{Duration, Instant};
 
 const DEBOUNCE: Duration = Duration::from_millis(200);
+
+/// Cursor styling that indicates vim NORMAL mode in the input box.
+/// The sequence is: ESC[22m (normal intensity, ending the dim arrow) immediately
+/// followed by ESC[100m (bright black / gray background on the cursor character).
+const NORMAL_MODE_SIG: &[u8] = b"\x1b[22m\x1b[100m";
+
+/// Cursor styling that indicates vim INSERT mode in the input box.
+/// The sequence is: ESC[22m immediately followed by ESC[7m (reverse video).
+const INSERT_MODE_SIG: &[u8] = b"\x1b[22m\x1b[7m";
 
 /// Check whether the (ANSI-stripped) text contains a busy indicator.
 ///
@@ -37,6 +47,9 @@ impl OutputMonitor {
     /// Returns `true` when the agent first enters the Busy state
     /// (i.e. transitions from Idle to Busy).
     pub fn process_chunk(&mut self, raw: &[u8]) -> bool {
+        // Detect vim mode changes from cursor styling escape sequences.
+        self.detect_vim_mode(raw);
+
         let stripped = strip_ansi_escapes::strip(raw);
         let text = String::from_utf8_lossy(&stripped);
 
@@ -47,6 +60,16 @@ impl OutputMonitor {
             return entered_busy;
         }
         false
+    }
+
+    /// Detect vim mode transitions from the raw cursor styling sequences
+    /// that the Cursor Agent input box emits.
+    fn detect_vim_mode(&self, raw: &[u8]) {
+        if raw.windows(NORMAL_MODE_SIG.len()).any(|w| w == NORMAL_MODE_SIG) {
+            state::set_vim_mode(VimMode::Normal);
+        } else if raw.windows(INSERT_MODE_SIG.len()).any(|w| w == INSERT_MODE_SIG) {
+            state::set_vim_mode(VimMode::Insert);
+        }
     }
 
     /// Returns `true` (once) when the agent transitions from Busy to Idle,

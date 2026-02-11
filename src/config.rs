@@ -31,7 +31,7 @@ impl Urgency {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub general: General,
@@ -49,13 +49,17 @@ impl Default for Config {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct Hooks {
     #[serde(default, rename = "status-change")]
     pub status_change: Option<String>,
+
+    /// Command to run when ESC is pressed while the agent is in vim NORMAL mode.
+    #[serde(default, rename = "esc-in-normal")]
+    pub esc_in_normal: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct General {
     #[serde(default = "default_notification_title", rename = "notification-title")]
     pub notification_title: String,
@@ -118,8 +122,46 @@ impl Config {
             .unwrap_or_default()
     }
 
-    fn config_path() -> Option<PathBuf> {
+    pub(crate) fn config_path() -> Option<PathBuf> {
         dirs::config_dir().map(|d| d.join("cursor-cli-wrapper").join("config.toml"))
+    }
+}
+
+/// Watch the config file for changes and reload when valid.
+///
+/// Polls the file's modification time every 2 seconds. If the file changes
+/// and the new contents parse successfully, the shared config is updated.
+/// Invalid configs are silently ignored (the previous config is kept).
+pub async fn watch_config(shared: std::sync::Arc<std::sync::RwLock<Config>>) {
+    let Some(path) = Config::config_path() else {
+        return;
+    };
+
+    let mut last_modified = std::fs::metadata(&path)
+        .and_then(|m| m.modified())
+        .ok();
+
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
+    interval.tick().await; // first tick is immediate, skip it
+
+    loop {
+        interval.tick().await;
+
+        let current_modified = std::fs::metadata(&path)
+            .and_then(|m| m.modified())
+            .ok();
+
+        if current_modified != last_modified {
+            last_modified = current_modified;
+
+            if let Ok(contents) = std::fs::read_to_string(&path) {
+                if let Ok(new_cfg) = toml::from_str::<Config>(&contents) {
+                    if let Ok(mut cfg) = shared.write() {
+                        *cfg = new_cfg;
+                    }
+                }
+            }
+        }
     }
 }
 
