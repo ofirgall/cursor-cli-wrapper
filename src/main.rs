@@ -69,9 +69,9 @@ async fn main() {
                 Ok(0) | Err(_) => break,
                 Ok(n) => n,
             };
-            // Detect Enter key (CR in raw mode) and clear tmux status
+            // Detect Enter key (CR in raw mode) and set tmux status to IDLE
             if buf[..n].contains(&b'\r') {
-                state::set_tmux_status("");
+                state::set_tmux_status("IDLE");
             }
             if pty_writer.write_all(&buf[..n]).await.is_err() {
                 break;
@@ -79,8 +79,9 @@ async fn main() {
         }
     });
 
-    // Load notification config
+    // Load notification config and set initial tmux status
     let cfg = config::Config::load();
+    state::set_tmux_status("IDLE");
 
     // Relay PTY -> stdout, with output monitoring for notifications
     let stdout_task = tokio::spawn(async move {
