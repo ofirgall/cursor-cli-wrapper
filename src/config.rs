@@ -9,6 +9,28 @@ fn default_notification_body() -> String {
     "Done".to_string()
 }
 
+fn default_notification_urgency() -> Urgency {
+    Urgency::Normal
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Urgency {
+    Low,
+    Normal,
+    Critical,
+}
+
+impl Urgency {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Urgency::Low => "low",
+            Urgency::Normal => "normal",
+            Urgency::Critical => "critical",
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Config {
     #[serde(default)]
@@ -30,6 +52,15 @@ pub struct General {
 
     #[serde(default = "default_notification_body", rename = "notification-body")]
     pub notification_body: String,
+
+    #[serde(default = "default_notification_urgency", rename = "notification-urgency")]
+    pub notification_urgency: Urgency,
+
+    #[serde(default, rename = "notification-app-name")]
+    pub notification_app_name: Option<String>,
+
+    #[serde(default, rename = "notification-icon")]
+    pub notification_icon: Option<String>,
 }
 
 impl Default for General {
@@ -37,9 +68,35 @@ impl Default for General {
         Self {
             notification_title: default_notification_title(),
             notification_body: default_notification_body(),
+            notification_urgency: default_notification_urgency(),
+            notification_app_name: None,
+            notification_icon: None,
         }
     }
 }
+
+impl General {
+    /// Build the full `notify-send` argument list from the config,
+    /// resolving placeholders in title and body.
+    pub fn notify_send_args(&self) -> Vec<String> {
+        let mut args = vec![
+            "-u".to_string(),
+            self.notification_urgency.as_str().to_string(),
+        ];
+        if let Some(ref app_name) = self.notification_app_name {
+            args.push("--app-name".to_string());
+            args.push(app_name.clone());
+        }
+        if let Some(ref icon) = self.notification_icon {
+            args.push("--icon".to_string());
+            args.push(icon.clone());
+        }
+        args.push(resolve_placeholders(&self.notification_title));
+        args.push(resolve_placeholders(&self.notification_body));
+        args
+    }
+}
+
 
 impl Config {
     /// Load config from `~/.config/cursor-cli-wrapper/config.toml`.

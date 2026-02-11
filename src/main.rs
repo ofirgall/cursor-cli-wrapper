@@ -1,4 +1,4 @@
-use cursor_cli_wrapper::{config, monitor};
+use cursor_cli_wrapper::{config, monitor, state};
 use std::io::IsTerminal;
 use std::os::fd::AsRawFd;
 use std::time::Duration;
@@ -69,6 +69,10 @@ async fn main() {
                 Ok(0) | Err(_) => break,
                 Ok(n) => n,
             };
+            // Detect Enter key (CR in raw mode) and clear tmux status
+            if buf[..n].contains(&b'\r') {
+                state::set_tmux_status("");
+            }
             if pty_writer.write_all(&buf[..n]).await.is_err() {
                 break;
             }
@@ -94,7 +98,9 @@ async fn main() {
                 Ok(Ok(0)) | Ok(Err(_)) => break,
                 Ok(Ok(n)) => {
                     let chunk = &buf[..n];
-                    monitor.process_chunk(chunk);
+                    if monitor.process_chunk(chunk) {
+                        state::set_tmux_status("INPROGRESS");
+                    }
 
                     if stdout.write_all(chunk).await.is_err() {
                         break;
@@ -108,10 +114,10 @@ async fn main() {
 
             if monitor.check_transition() {
                 // Agent finished generating/thinking — fire notification
-                let title = config::resolve_placeholders(&cfg.general.notification_title);
-                let body = config::resolve_placeholders(&cfg.general.notification_body);
+                state::set_tmux_status("WAITING");
+                let args = cfg.general.notify_send_args();
                 let _ = tokio::process::Command::new("notify-send")
-                    .args([&title, &body])
+                    .args(&args)
                     .spawn();
             }
         }
@@ -131,6 +137,9 @@ async fn main() {
     if is_tty {
         let _ = crossterm::terminal::disable_raw_mode();
     }
+
+    // Clear tmux status on exit
+    state::set_tmux_status("");
 
     std::process::exit(status.code().unwrap_or(1));
 }

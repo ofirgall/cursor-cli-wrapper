@@ -75,14 +75,20 @@ impl OutputMonitor {
 
     /// Scan a raw PTY output chunk for busy patterns.
     /// Strips ANSI escape codes before matching.
-    pub fn process_chunk(&mut self, raw: &[u8]) {
+    ///
+    /// Returns `true` when the agent first enters the Busy state
+    /// (i.e. transitions from Idle to Busy).
+    pub fn process_chunk(&mut self, raw: &[u8]) -> bool {
         let stripped = strip_ansi_escapes::strip(raw);
         let text = String::from_utf8_lossy(&stripped);
 
         if is_busy(&text) {
+            let entered_busy = self.state == AgentState::Idle;
             self.state = AgentState::Busy;
             self.last_busy_seen = Instant::now();
+            return entered_busy;
         }
+        false
     }
 
     /// Returns `true` (once) when the agent transitions from Busy to Idle,

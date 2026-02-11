@@ -14,3 +14,9 @@
 [general]
 notification-title = "Cursor Agent"
 notification-body = "Done - {git_branch} ({cwd})"
+# Urgency level: "low", "normal", or "critical"
+notification-urgency = "normal"
+# Application name (passed as --app-name to notify-send)
+# notification-app-name = "cursor-cli-wrapper"
+# Icon name or path (passed as --icon to notify-send)
+# notification-icon = "dialog-information"
