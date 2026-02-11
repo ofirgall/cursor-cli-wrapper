@@ -1,57 +1,15 @@
 use std::time::{Duration, Instant};
 
-const DEBOUNCE: Duration = Duration::from_millis(1500);
+const DEBOUNCE: Duration = Duration::from_millis(200);
 
 /// Check whether the (ANSI-stripped) text contains a busy indicator.
 ///
-/// Instead of matching specific keywords, this detects the universal
-/// dot-animation pattern used by cursor-agent for loading states:
-/// a capitalized word immediately followed by 1-3 dots (e.g.
-/// "Thinking.", "Generating..", "Reading...").
-///
-/// This automatically handles any current or future loading state
-/// without needing to know the state names in advance.
+/// Detects the hexagon spinner icons that cursor-agent uses for loading
+/// states: filled `⬢` (U+2B22) and hollow `⬡` (U+2B21).  These
+/// characters only appear on the status line during active
+/// generation/thinking and are absent once the agent finishes.
 fn is_busy(text: &str) -> bool {
-    let chars: Vec<char> = text.chars().collect();
-    let len = chars.len();
-    let mut i = 0;
-
-    while i < len {
-        // Look for an uppercase letter that starts a word
-        if chars[i].is_ascii_uppercase() {
-            let word_start = i;
-            i += 1;
-
-            // Consume lowercase letters
-            while i < len && chars[i].is_ascii_lowercase() {
-                i += 1;
-            }
-
-            // Need at least 2 characters for a real word (e.g. "Reading", not "R")
-            if i - word_start < 2 {
-                continue;
-            }
-
-            // Count trailing dots
-            let dot_start = i;
-            while i < len && chars[i] == '.' {
-                i += 1;
-            }
-            let dot_count = i - dot_start;
-
-            // Match if we found 1-3 dots followed by whitespace or end-of-string
-            if dot_count >= 1
-                && dot_count <= 3
-                && (i >= len || chars[i].is_ascii_whitespace())
-            {
-                return true;
-            }
-        } else {
-            i += 1;
-        }
-    }
-
-    false
+    text.contains('\u{2B22}') || text.contains('\u{2B21}')
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,5 +57,67 @@ impl OutputMonitor {
             return true;
         }
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- Generating states (from shots/generating/) --
+
+    #[test]
+    fn generating_filled_hexagon_three_dots() {
+        // shots/generating/1.txt
+        assert!(is_busy("  ⬢ Generating..."));
+    }
+
+    #[test]
+    fn generating_hollow_hexagon_one_dot() {
+        // shots/generating/2.txt
+        assert!(is_busy("  ⬡ Generating."));
+    }
+
+    #[test]
+    fn generating_filled_hexagon_no_dots() {
+        // shots/generating/3.txt
+        assert!(is_busy("  ⬢ Generating"));
+    }
+
+    // -- Thinking states (from shots/thinking/) --
+
+    #[test]
+    fn thinking_hollow_hexagon_three_dots() {
+        // shots/thinking/1.txt
+        assert!(is_busy("  ⬡ Thinking...  202 tokens"));
+    }
+
+    #[test]
+    fn thinking_filled_hexagon_one_dot() {
+        // shots/thinking/2.txt
+        assert!(is_busy("  ⬢ Thinking.    202 tokens"));
+    }
+
+    #[test]
+    fn thinking_hollow_hexagon_no_dots() {
+        // shots/thinking/3.txt
+        assert!(is_busy("  ⬡ Thinking     202 tokens"));
+    }
+
+    // -- Done / idle state (from shots/done/) --
+
+    #[test]
+    fn done_state_is_not_busy() {
+        // shots/done/1.txt: normal response text, no hexagons
+        let done_text = "  I think you're saying that \"this\" — the current AI interaction \
+                         you're having right now — is \"a prompt that's running\"";
+        assert!(!is_busy(done_text));
+    }
+
+    #[test]
+    fn plain_text_is_not_busy() {
+        assert!(!is_busy("Generating..."));
+        assert!(!is_busy("Hello world"));
+        assert!(!is_busy(""));
     }
 }

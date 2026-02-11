@@ -76,9 +76,9 @@ async fn main() {
                 Ok(n) => n,
             };
             // Detect Enter key (CR in raw mode) and set tmux status to IDLE
-            if buf[..n].contains(&b'\r') {
-                state::set_tmux_status("IDLE", stdin_hook.as_deref());
-            }
+            // if buf[..n].contains(&b'\r') {
+            //     state::set_tmux_status("IDLE", stdin_hook.as_deref());
+            // }
             if pty_writer.write_all(&buf[..n]).await.is_err() {
                 break;
             }
