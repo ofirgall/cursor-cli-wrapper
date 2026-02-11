@@ -75,11 +75,12 @@ async fn main() {
                 Ok(0) | Err(_) => break,
                 Ok(n) => n,
             };
-            // Detect Enter key (CR in raw mode) and set tmux status to IDLE
-            // if buf[..n].contains(&b'\r') {
-            //     state::set_tmux_status("IDLE", stdin_hook.as_deref());
-            // }
-            if pty_writer.write_all(&buf[..n]).await.is_err() {
+            // Detect Alt+I (ESC 'i' = \x1b\x69) and reset status to IDLE
+            let data = &buf[..n];
+            if data.windows(2).any(|w| w == b"\x1bi") {
+                state::set_tmux_status("IDLE", stdin_hook.as_deref());
+            }
+            if pty_writer.write_all(data).await.is_err() {
                 break;
             }
         }

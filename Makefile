@@ -1,14 +1,16 @@
 PREFIX ?= /usr/local
 BINDIR := $(PREFIX)/bin
 
-.PHONY: build install uninstall clean
+.PHONY: build run install uninstall clean
 
 build:
 	cargo build --release
 
-install: build
-	install -Dm755 target/release/cursor-cli-wrapper $(DESTDIR)$(BINDIR)/cursor-cli-wrapper
-	install -Dm755 target/release/cursor-cli-wrapper-backend $(DESTDIR)$(BINDIR)/cursor-cli-wrapper-backend
+run:
+	cargo run --bin cursor-cli-wrapper
+
+install:
+	cargo install --locked --path .
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/cursor-cli-wrapper
