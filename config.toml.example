@@ -25,3 +25,5 @@ notification-urgency = "normal"
 # Shell command to run on every status change.
 # {status} is replaced with the new value (IDLE, INPROGRESS, WAITING, or empty).
 # status-change = "echo {status} >> /tmp/cursor-status.log"
+# Shell command to run when ESC is pressed while the agent input is in vim NORMAL mode.
+# esc-in-normal = "tmux select-pane -t :.+"
