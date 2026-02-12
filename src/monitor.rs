@@ -9,6 +9,7 @@ const DEBOUNCE: Duration = Duration::from_millis(200);
 /// characters only appear on the status line during active
 /// generation/thinking and are absent once the agent finishes.
 fn is_busy(text: &str) -> bool {
+    // FIXME: detect dots as well
     text.contains('\u{2B22}') || text.contains('\u{2B21}')
 }
 

@@ -6,3 +6,4 @@ Wrapping cursor-cli in order to support custom features such as notifications
 - [ ] notify on ask for input (plan)
 - [ ] custom allowlist
 - [ ] get/set prompt
+- [ ] todo watch config file and reload before each notificiation
