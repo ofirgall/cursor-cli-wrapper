@@ -7,3 +7,5 @@ Wrapping cursor-cli in order to support custom features such as notifications
 - [ ] custom allowlist
 - [ ] get/set prompt
 - [ ] todo watch config file and reload before each notificiation
+- [ ] go over FIXMEs
+- [ ] write features in README.md
