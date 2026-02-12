@@ -3,6 +3,7 @@ use std::io::IsTerminal;
 use std::os::fd::AsRawFd;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use tokio::fs::OpenOptions;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 use tokio::signal::unix::{SignalKind, signal};
 
@@ -114,6 +115,23 @@ async fn main() {
         }
     });
 
+    // Optionally dump all raw PTY output to a file (like tmux pipe-pane)
+    let mut dump_file = match std::env::var("CURSOR_WRAPPER_DUMP_FILE") {
+        Ok(path) if !path.is_empty() => Some(
+            OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(&path)
+                .await
+                .unwrap_or_else(|e| {
+                    eprintln!("failed to open dump file {path}: {e}");
+                    std::process::exit(1);
+                }),
+        ),
+        _ => None,
+    };
+
     // Relay PTY -> stdout, with output monitoring for notifications
     let stdout_cfg = Arc::clone(&cfg);
     let stdout_task = tokio::spawn(async move {
@@ -140,6 +158,12 @@ async fn main() {
                         break;
                     }
                     let _ = stdout.flush().await;
+
+                    // Dump raw output to file when configured
+                    if let Some(ref mut f) = dump_file {
+                        let _ = f.write_all(chunk).await;
+                        let _ = f.flush().await;
+                    }
                 }
                 Err(_timeout) => {
                     // No data for 1s — just check for transitions below
