@@ -27,3 +27,6 @@ notification-urgency = "normal"
 # status-change = "echo {status} >> /tmp/cursor-status.log"
 # Shell command to run when ESC is pressed while the agent input is in vim NORMAL mode.
 # esc-in-normal = "tmux select-pane -t :.+"
+# Shell command to run when the vim mode changes.
+# {vim_mode} is replaced with the new mode ("normal" or "insert").
+# vim-mode-change = "echo {vim_mode} >> /tmp/cursor-vim-mode.log"

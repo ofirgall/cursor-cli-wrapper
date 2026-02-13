@@ -57,6 +57,12 @@ pub struct Hooks {
     /// Command to run when ESC is pressed while the agent is in vim NORMAL mode.
     #[serde(default, rename = "esc-in-normal")]
     pub esc_in_normal: Option<String>,
+
+    /// Command to run when the vim mode changes (e.g. insert -> normal).
+    /// The placeholder `{vim_mode}` is replaced with the new mode name
+    /// (`normal` or `insert`).
+    #[serde(default, rename = "vim-mode-change")]
+    pub vim_mode_change: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

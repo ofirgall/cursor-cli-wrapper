@@ -12,6 +12,13 @@ impl VimMode {
     fn from_u8(v: u8) -> Self {
         if v == 1 { VimMode::Normal } else { VimMode::Insert }
     }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            VimMode::Insert => "insert",
+            VimMode::Normal => "normal",
+        }
+    }
 }
 
 /// Global atomic storing the current vim mode.

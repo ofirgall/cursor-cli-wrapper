@@ -29,9 +29,18 @@ enum AgentState {
     Busy,
 }
 
+/// Result of processing a single PTY output chunk.
+pub struct ChunkResult {
+    /// `true` when the agent first enters the Busy state (Idle -> Busy).
+    pub entered_busy: bool,
+    /// Set when the vim mode changed compared to the previous chunk.
+    pub vim_mode_changed: Option<VimMode>,
+}
+
 pub struct OutputMonitor {
     state: AgentState,
     last_busy_seen: Instant,
+    last_vim_mode: VimMode,
 }
 
 impl OutputMonitor {
@@ -39,38 +48,55 @@ impl OutputMonitor {
         Self {
             state: AgentState::Idle,
             last_busy_seen: Instant::now(),
+            last_vim_mode: VimMode::Insert,
         }
     }
 
-    /// Scan a raw PTY output chunk for busy patterns.
+    /// Scan a raw PTY output chunk for busy patterns and vim mode changes.
     /// Strips ANSI escape codes before matching.
-    ///
-    /// Returns `true` when the agent first enters the Busy state
-    /// (i.e. transitions from Idle to Busy).
-    pub fn process_chunk(&mut self, raw: &[u8]) -> bool {
+    pub fn process_chunk(&mut self, raw: &[u8]) -> ChunkResult {
         // Detect vim mode changes from cursor styling escape sequences.
-        self.detect_vim_mode(raw);
+        let vim_mode_changed = self.detect_vim_mode(raw);
 
         let stripped = strip_ansi_escapes::strip(raw);
         let text = String::from_utf8_lossy(&stripped);
 
-        if is_busy(&text) {
-            let entered_busy = self.state == AgentState::Idle;
+        let entered_busy = if is_busy(&text) {
+            let entered = self.state == AgentState::Idle;
             self.state = AgentState::Busy;
             self.last_busy_seen = Instant::now();
-            return entered_busy;
+            entered
+        } else {
+            false
+        };
+
+        ChunkResult {
+            entered_busy,
+            vim_mode_changed,
         }
-        false
     }
 
     /// Detect vim mode transitions from the raw cursor styling sequences
     /// that the Cursor Agent input box emits.
-    fn detect_vim_mode(&self, raw: &[u8]) {
-        if raw.windows(NORMAL_MODE_SIG.len()).any(|w| w == NORMAL_MODE_SIG) {
-            state::set_vim_mode(VimMode::Normal);
+    ///
+    /// Returns `Some(mode)` when the mode *changes*, `None` otherwise.
+    fn detect_vim_mode(&mut self, raw: &[u8]) -> Option<VimMode> {
+        let new_mode = if raw.windows(NORMAL_MODE_SIG.len()).any(|w| w == NORMAL_MODE_SIG) {
+            Some(VimMode::Normal)
         } else if raw.windows(INSERT_MODE_SIG.len()).any(|w| w == INSERT_MODE_SIG) {
-            state::set_vim_mode(VimMode::Insert);
+            Some(VimMode::Insert)
+        } else {
+            None
+        };
+
+        if let Some(mode) = new_mode {
+            state::set_vim_mode(mode);
+            if mode != self.last_vim_mode {
+                self.last_vim_mode = mode;
+                return Some(mode);
+            }
         }
+        None
     }
 
     /// Returns `true` (once) when the agent transitions from Busy to Idle,

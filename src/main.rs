@@ -149,9 +149,17 @@ async fn main() {
                 Ok(Ok(0)) | Ok(Err(_)) => break,
                 Ok(Ok(n)) => {
                     let chunk = &buf[..n];
-                    if monitor.process_chunk(chunk) {
+                    let result = monitor.process_chunk(chunk);
+                    if result.entered_busy {
                         let hook = stdout_cfg.read().unwrap().hooks.status_change.clone();
                         state::set_tmux_status("INPROGRESS", hook.as_deref());
+                    }
+                    if let Some(mode) = result.vim_mode_changed {
+                        let hook = stdout_cfg.read().unwrap().hooks.vim_mode_change.clone();
+                        if let Some(cmd) = hook {
+                            let cmd = cmd.replace("{vim_mode}", mode.as_str());
+                            state::run_hook(&cmd);
+                        }
                     }
 
                     if stdout.write_all(chunk).await.is_err() {
