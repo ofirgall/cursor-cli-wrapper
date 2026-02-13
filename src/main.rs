@@ -106,6 +106,9 @@ async fn main() {
             };
             const ALT_I: &[u8] = b"\x1bi";
             const ESC: u8 = 0x1b;
+            // Kitty keyboard protocol encoding for ESC (used by Neovim):
+            // CSI 27 ; 1 u  means keycode 27 (Escape) with no modifiers.
+            const CSI_U_ESC: &[u8] = b"\x1b[27;1u";
 
             let data = &buf[..n];
             let cfg_snapshot = stdin_cfg.read().unwrap().clone();
@@ -122,12 +125,14 @@ async fn main() {
             }
 
             // Detect standalone ESC while in vim NORMAL mode and fire hook.
-            // A lone ESC is a single byte (not part of an escape sequence
-            // like Alt+key or arrow keys which arrive as multi-byte reads).
-            if n == 1
-                && data[0] == ESC
-                && state::get_vim_mode() == state::VimMode::Normal
-            {
+            // A lone 0x1b byte (not part of a multi-byte escape sequence)
+            // OR the kitty keyboard protocol sequence \x1b[27;1u (sent by
+            // Neovim) both count as an ESC keypress.
+            let is_esc = (n == 1 && data[0] == ESC)
+                || data
+                    .windows(CSI_U_ESC.len())
+                    .any(|w| w == CSI_U_ESC);
+            if is_esc && state::get_vim_mode() == state::VimMode::Normal {
                 if let Some(ref cmd) = cfg_snapshot.hooks.esc_in_normal {
                     state::run_hook(cmd);
                 }
