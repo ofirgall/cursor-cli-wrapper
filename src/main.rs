@@ -77,6 +77,23 @@ async fn main() {
 
     state::set_tmux_status("IDLE", cfg.read().unwrap().hooks.status_change.as_deref());
 
+    // Optionally dump all raw stdin input to a file (for debugging keypresses)
+    let mut input_dump_file = match std::env::var("CURSOR_WRAPPER_INPUT_DUMP_FILE") {
+        Ok(path) if !path.is_empty() => Some(
+            OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(&path)
+                .await
+                .unwrap_or_else(|e| {
+                    eprintln!("failed to open input dump file {path}: {e}");
+                    std::process::exit(1);
+                }),
+        ),
+        _ => None,
+    };
+
     // Relay stdin -> PTY
     let stdin_cfg = Arc::clone(&cfg);
     let _stdin_task = tokio::spawn(async move {
@@ -92,6 +109,12 @@ async fn main() {
 
             let data = &buf[..n];
             let cfg_snapshot = stdin_cfg.read().unwrap().clone();
+
+            // Dump raw input to file when configured
+            if let Some(ref mut f) = input_dump_file {
+                let _ = f.write_all(data).await;
+                let _ = f.flush().await;
+            }
 
             // Detect Alt+I and reset status to IDLE
             if data.windows(ALT_I.len()).any(|w| w == ALT_I) {
