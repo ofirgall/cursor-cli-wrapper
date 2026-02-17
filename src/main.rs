@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::fs::OpenOptions;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
-use tokio::signal::unix::{SignalKind, signal};
+use tokio::signal::unix::{signal, SignalKind};
 
 #[tokio::main]
 async fn main() {
@@ -122,26 +122,50 @@ async fn main() {
                 let _ = f.flush().await;
             }
 
-            // Detect Alt+I and reset status to IDLE
-            if data.windows(ALT_I.len()).any(|w| w == ALT_I)
-                || data.windows(CSI_U_ALT_I.len()).any(|w| w == CSI_U_ALT_I) {
+            // Detect Alt+I and reset status to IDLE, stripping the
+            // sequence so it is not forwarded to the wrapped CLI.
+            let has_alt_i = data.windows(ALT_I.len()).any(|w| w == ALT_I)
+                || data.windows(CSI_U_ALT_I.len()).any(|w| w == CSI_U_ALT_I);
+            // When Alt+I is found, reset status to IDLE and strip every
+            // occurrence of the Alt+I sequence (both traditional and Kitty
+            // encodings) from the buffer so the keypress is never forwarded
+            // to the wrapped CLI.  We check the longer CSI_U_ALT_I pattern
+            // first to avoid a false partial match with the 2-byte ALT_I
+            // prefix (both start with 0x1b).  Any remaining bytes that are
+            // not part of an Alt+I sequence are preserved and forwarded
+            // normally.
+            let data = if has_alt_i {
                 state::set_tmux_status("IDLE", cfg_snapshot.hooks.status_change.as_deref());
-            }
+                let mut filtered = Vec::with_capacity(n);
+                let mut i = 0;
+                while i < data.len() {
+                    if data[i..].starts_with(CSI_U_ALT_I) {
+                        i += CSI_U_ALT_I.len();
+                    } else if data[i..].starts_with(ALT_I) {
+                        i += ALT_I.len();
+                    } else {
+                        filtered.push(data[i]);
+                        i += 1;
+                    }
+                }
+                filtered
+            } else {
+                data.to_vec()
+            };
+            let data = data.as_slice();
 
             // Detect standalone ESC while in vim NORMAL mode and fire hook.
             // A lone 0x1b byte (not part of a multi-byte escape sequence)
             // OR the kitty keyboard protocol sequence \x1b[27;1u (sent by
             // Neovim) both count as an ESC keypress.
-            let is_esc = (n == 1 && data[0] == ESC)
-                || data
-                    .windows(CSI_U_ESC.len())
-                    .any(|w| w == CSI_U_ESC);
+            let is_esc =
+                (n == 1 && data[0] == ESC) || data.windows(CSI_U_ESC.len()).any(|w| w == CSI_U_ESC);
             if is_esc && state::get_vim_mode() == state::VimMode::Normal {
                 if let Some(ref cmd) = cfg_snapshot.hooks.esc_in_normal {
                     state::run_hook(cmd);
                 }
             }
-            if pty_writer.write_all(data).await.is_err() {
+            if !data.is_empty() && pty_writer.write_all(data).await.is_err() {
                 break;
             }
         }

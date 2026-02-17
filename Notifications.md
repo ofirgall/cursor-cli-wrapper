@@ -46,6 +46,22 @@ pattern might momentarily be absent between chunks.
 A 1-second read timeout on the PTY relay ensures the transition check runs even
 if cursor-agent stops sending output after finishing.
 
+## Manual Reset with Alt+I
+
+Pressing **Alt+I** at any time resets the status back to **IDLE**. This is
+useful when you want to manually dismiss the current state (e.g. suppress an
+upcoming notification).
+
+The keystroke is intercepted and **not forwarded** to the wrapped CLI, so it
+won't interfere with whatever is running inside.
+
+Both encoding variants are recognised:
+
+| Encoding | Sequence | Typical source |
+|----------|----------|----------------|
+| Traditional | `ESC i` (`\x1b i`) | Most terminals |
+| Kitty keyboard protocol | `CSI 105 ; 3 u` (`\x1b[105;3u`) | Neovim and other kitty-protocol-aware apps |
+
 ## Requirements
 
 - `notify-send` must be available on `$PATH` (provided by `libnotify` /
