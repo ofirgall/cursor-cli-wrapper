@@ -105,6 +105,9 @@ async fn main() {
                 Ok(n) => n,
             };
             const ALT_I: &[u8] = b"\x1bi";
+            // Kitty keyboard protocol encoding for Alt+I (used by Neovim):
+            // CSI 105 ; 3 u  means keycode 105 ('i') with Alt modifier (3).
+            const CSI_U_ALT_I: &[u8] = b"\x1b[105;3u";
             const ESC: u8 = 0x1b;
             // Kitty keyboard protocol encoding for ESC (used by Neovim):
             // CSI 27 ; 1 u  means keycode 27 (Escape) with no modifiers.
@@ -120,7 +123,8 @@ async fn main() {
             }
 
             // Detect Alt+I and reset status to IDLE
-            if data.windows(ALT_I.len()).any(|w| w == ALT_I) {
+            if data.windows(ALT_I.len()).any(|w| w == ALT_I)
+                || data.windows(CSI_U_ALT_I.len()).any(|w| w == CSI_U_ALT_I) {
                 state::set_tmux_status("IDLE", cfg_snapshot.hooks.status_change.as_deref());
             }
 
