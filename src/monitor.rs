@@ -1,16 +1,19 @@
 use crate::state::{self, VimMode};
+use regex::bytes::Regex;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 const DEBOUNCE: Duration = Duration::from_millis(200);
 
-/// Cursor styling that indicates vim NORMAL mode in the input box.
-/// The sequence is: ESC[22m (normal intensity, ending the dim arrow) immediately
-/// followed by ESC[100m (bright black / gray background on the cursor character).
-const NORMAL_MODE_SIG: &[u8] = b"\x1b[22m\x1b[100m";
+/// Regex matching the vim NORMAL mode cursor styling:
+/// ESC[100m {any char} ESC[49m
+static NORMAL_MODE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\x1b\[100m.\x1b\[49m").unwrap());
 
-/// Cursor styling that indicates vim INSERT mode in the input box.
-/// The sequence is: ESC[22m immediately followed by ESC[7m (reverse video).
-const INSERT_MODE_SIG: &[u8] = b"\x1b[22m\x1b[7m";
+/// Regex matching the vim INSERT mode cursor styling:
+/// ESC[7m {any char} ESC[27m
+static INSERT_MODE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\x1b\[7m.\x1b\[27m").unwrap());
 
 /// Check whether the (ANSI-stripped) text contains a busy indicator.
 ///
@@ -81,9 +84,9 @@ impl OutputMonitor {
     ///
     /// Returns `Some(mode)` when the mode *changes*, `None` otherwise.
     fn detect_vim_mode(&mut self, raw: &[u8]) -> Option<VimMode> {
-        let new_mode = if raw.windows(NORMAL_MODE_SIG.len()).any(|w| w == NORMAL_MODE_SIG) {
+        let new_mode = if NORMAL_MODE_RE.is_match(raw) {
             Some(VimMode::Normal)
-        } else if raw.windows(INSERT_MODE_SIG.len()).any(|w| w == INSERT_MODE_SIG) {
+        } else if INSERT_MODE_RE.is_match(raw) {
             Some(VimMode::Insert)
         } else {
             None
