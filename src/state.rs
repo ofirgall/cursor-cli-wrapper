@@ -10,7 +10,11 @@ pub enum VimMode {
 
 impl VimMode {
     fn from_u8(v: u8) -> Self {
-        if v == 1 { VimMode::Normal } else { VimMode::Insert }
+        if v == 1 {
+            VimMode::Normal
+        } else {
+            VimMode::Insert
+        }
     }
 
     pub fn as_str(self) -> &'static str {
@@ -34,13 +38,13 @@ pub fn get_vim_mode() -> VimMode {
     VimMode::from_u8(VIM_MODE.load(Ordering::Relaxed))
 }
 
-/// Run a shell command in the background, discarding output.
+/// Run a shell command in the foreground, discarding output.
 pub fn run_hook(cmd: &str) {
     let _ = std::process::Command::new("sh")
         .args(["-c", cmd])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .spawn();
+        .status();
 }
 
 /// Set the tmux user option `@cursor-cli-wrapper-status` on the current session
@@ -54,13 +58,13 @@ pub fn set_tmux_status(value: &str, hook: Option<&str>) {
             .args(["set-option", "-qu", "@cursor-cli-wrapper-status"])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .spawn();
+            .status();
     } else {
         let _ = std::process::Command::new("tmux")
             .args(["set-option", "-q", "@cursor-cli-wrapper-status", value])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .spawn();
+            .status();
     }
 
     if let Some(cmd) = hook {
