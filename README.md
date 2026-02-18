@@ -2,6 +2,7 @@
 Wrapping cursor-cli in order to support custom features such as notifications
 
 # TODO
+- [ ] if --print passed (headless) do not wrap the cli.
 - [ ] Ctrl+C should set back to idle instead of notifying
 - [ ] notify on ask for run
 - [ ] notify on ask for input (plan)
