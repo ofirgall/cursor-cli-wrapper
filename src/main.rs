@@ -1,4 +1,4 @@
-use cursor_cli_wrapper::{config, monitor, state};
+use cursor_cli_wrapper::{config, log, monitor, state};
 use std::io::IsTerminal;
 use std::os::fd::AsRawFd;
 use std::sync::{Arc, RwLock};
@@ -9,6 +9,8 @@ use tokio::signal::unix::{signal, SignalKind};
 
 #[tokio::main]
 async fn main() {
+    log::init();
+
     let args: Vec<String> = std::env::args().skip(1).collect();
 
     let (pty, pts) = pty_process::open().unwrap_or_else(|e| {

@@ -1,4 +1,5 @@
 use crate::state::{self, VimMode};
+use crate::wlog;
 use regex::bytes::Regex as BytesRegex;
 use regex::Regex;
 use std::sync::LazyLock;
@@ -77,6 +78,8 @@ impl OutputMonitor {
                 false
             } else {
                 let since = *self.busy_since.get_or_insert_with(Instant::now);
+                wlog!("busy debounce: {:.3}s / {:.3}s", since.elapsed().as_secs_f64(), DEBOUNCE_TO_BUSY.as_secs_f64());
+
                 if since.elapsed() >= DEBOUNCE_TO_BUSY {
                     self.state = AgentState::Busy;
                     true
