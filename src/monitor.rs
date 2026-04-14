@@ -3,7 +3,7 @@ use regex::bytes::Regex;
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
-const DEBOUNCE: Duration = Duration::from_millis(200);
+const DEBOUNCE: Duration = Duration::from_secs(1);
 
 /// Regex matching the vim NORMAL mode cursor styling:
 /// ESC[100m {any char} ESC[49m
