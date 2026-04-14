@@ -15,14 +15,22 @@ static NORMAL_MODE_RE: LazyLock<Regex> =
 static INSERT_MODE_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\x1b\[7m.\x1b\[27m").unwrap());
 
-/// Check whether the (ANSI-stripped) text contains a busy indicator.
+/// Green bullet spinner: ESC[32m • ESC[39m
+/// The bullet U+2022 is \xe2\x80\xa2 in UTF-8.
+const GREEN_BULLET: &[u8] = b"\x1b[32m\xe2\x80\xa2\x1b[39m";
+
+/// Check whether the raw PTY output contains a busy indicator.
 ///
-/// Detects the hexagon spinner icons that cursor-agent uses for loading
-/// states: filled `⬢` (U+2B22) and hollow `⬡` (U+2B21).  These
-/// characters only appear on the status line during active
-/// generation/thinking and are absent once the agent finishes.
-fn is_busy(text: &str) -> bool {
-    // FIXME: detect dots as well
+/// Detects:
+/// - The green bullet spinner `•` (U+2022) — current Cursor indicator.
+/// - Legacy hexagon spinners `⬢` (U+2B22) / `⬡` (U+2B21).
+fn is_busy(raw: &[u8]) -> bool {
+    if raw.windows(GREEN_BULLET.len()).any(|w| w == GREEN_BULLET) {
+        return true;
+    }
+    // Legacy hexagons — check stripped text
+    let stripped = strip_ansi_escapes::strip(raw);
+    let text = String::from_utf8_lossy(&stripped);
     text.contains('\u{2B22}') || text.contains('\u{2B21}')
 }
 
@@ -61,10 +69,7 @@ impl OutputMonitor {
         // Detect vim mode changes from cursor styling escape sequences.
         let vim_mode_changed = self.detect_vim_mode(raw);
 
-        let stripped = strip_ansi_escapes::strip(raw);
-        let text = String::from_utf8_lossy(&stripped);
-
-        let entered_busy = if is_busy(&text) {
+        let entered_busy = if is_busy(raw) {
             let entered = self.state == AgentState::Idle;
             self.state = AgentState::Busy;
             self.last_busy_seen = Instant::now();
@@ -117,60 +122,50 @@ impl OutputMonitor {
 mod tests {
     use super::*;
 
-    // -- Generating states (from shots/generating/) --
+    // -- Green bullet spinner (current Cursor indicator) --
 
     #[test]
-    fn generating_filled_hexagon_three_dots() {
-        // shots/generating/1.txt
-        assert!(is_busy("  ⬢ Generating..."));
+    fn green_bullet_generating() {
+        // ESC[32m • ESC[39m  ESC[1m Generating... ESC[22m
+        let raw = b"  \x1b[32m\xe2\x80\xa2\x1b[39m \x1b[1mGenerating...\x1b[22m";
+        assert!(is_busy(raw));
     }
 
     #[test]
-    fn generating_hollow_hexagon_one_dot() {
-        // shots/generating/2.txt
-        assert!(is_busy("  ⬡ Generating."));
+    fn uncolored_bullet_is_not_busy() {
+        // Plain bullet without green color codes should NOT match
+        assert!(!is_busy("  • Generating...".as_bytes()));
     }
 
     #[test]
-    fn generating_filled_hexagon_no_dots() {
-        // shots/generating/3.txt
-        assert!(is_busy("  ⬢ Generating"));
+    fn bare_bullet_in_text_is_not_busy() {
+        assert!(!is_busy("here is a bullet • in text".as_bytes()));
     }
 
-    // -- Thinking states (from shots/thinking/) --
+    // -- Legacy hexagon indicators --
 
     #[test]
-    fn thinking_hollow_hexagon_three_dots() {
-        // shots/thinking/1.txt
-        assert!(is_busy("  ⬡ Thinking...  202 tokens"));
+    fn legacy_filled_hexagon() {
+        assert!(is_busy("  ⬢ Generating...".as_bytes()));
     }
 
     #[test]
-    fn thinking_filled_hexagon_one_dot() {
-        // shots/thinking/2.txt
-        assert!(is_busy("  ⬢ Thinking.    202 tokens"));
+    fn legacy_hollow_hexagon() {
+        assert!(is_busy("  ⬡ Thinking...  202 tokens".as_bytes()));
     }
 
-    #[test]
-    fn thinking_hollow_hexagon_no_dots() {
-        // shots/thinking/3.txt
-        assert!(is_busy("  ⬡ Thinking     202 tokens"));
-    }
-
-    // -- Done / idle state (from shots/done/) --
+    // -- Idle / done states --
 
     #[test]
     fn done_state_is_not_busy() {
-        // shots/done/1.txt: normal response text, no hexagons
-        let done_text = "  I think you're saying that \"this\" — the current AI interaction \
-                         you're having right now — is \"a prompt that's running\"";
+        let done_text = b"  I was saying that the current AI interaction \
+                         you're having right now is a prompt that's running";
         assert!(!is_busy(done_text));
     }
 
     #[test]
     fn plain_text_is_not_busy() {
-        assert!(!is_busy("Generating..."));
-        assert!(!is_busy("Hello world"));
-        assert!(!is_busy(""));
+        assert!(!is_busy(b"Hello world"));
+        assert!(!is_busy(b""));
     }
 }
