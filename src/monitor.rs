@@ -15,20 +15,22 @@ static NORMAL_MODE_RE: LazyLock<Regex> =
 static INSERT_MODE_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\x1b\[7m.\x1b\[27m").unwrap());
 
-/// Green bullet spinner: ESC[32m • ESC[39m
-/// The bullet U+2022 is \xe2\x80\xa2 in UTF-8.
-const GREEN_BULLET: &[u8] = b"\x1b[32m\xe2\x80\xa2\x1b[39m";
+/// Regex matching two consecutive Braille Pattern chars (U+2800–U+28FF).
+/// In UTF-8 each is \xe2[\xa0-\xa3][\x80-\xbf].
+static BRAILLE_SPINNER_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?-u)\xe2[\xa0-\xa3][\x80-\xbf]\xe2[\xa0-\xa3][\x80-\xbf]").unwrap()
+});
 
 /// Check whether the raw PTY output contains a busy indicator.
 ///
-/// Detects:
-/// - The green bullet spinner `•` (U+2022) — current Cursor indicator.
-/// - Legacy hexagon spinners `⬢` (U+2B22) / `⬡` (U+2B21).
+/// Detects (on ANSI-stripped text):
+/// - Braille spinner (two consecutive braille-pattern chars) — current Cursor indicator.
+/// - Bullet spinner `•` (U+2022) — previous Cursor indicator.
+/// - Hexagon spinners `⬢` (U+2B22) / `⬡` (U+2B21) — legacy indicator.
 fn is_busy(raw: &[u8]) -> bool {
-    if raw.windows(GREEN_BULLET.len()).any(|w| w == GREEN_BULLET) {
+    if BRAILLE_SPINNER_RE.is_match(raw) {
         return true;
     }
-    // Legacy hexagons — check stripped text
     let stripped = strip_ansi_escapes::strip(raw);
     let text = String::from_utf8_lossy(&stripped);
     text.contains('\u{2B22}') || text.contains('\u{2B21}')
@@ -122,27 +124,34 @@ impl OutputMonitor {
 mod tests {
     use super::*;
 
-    // -- Green bullet spinner (current Cursor indicator) --
+    // -- Braille spinner (current Cursor indicator) --
 
     #[test]
-    fn green_bullet_generating() {
-        // ESC[32m • ESC[39m  ESC[1m Generating... ESC[22m
-        let raw = b"  \x1b[32m\xe2\x80\xa2\x1b[39m \x1b[1mGenerating...\x1b[22m";
+    fn braille_spinner_generating() {
+        // ESC[32m ⡕⡰ ESC[39m  ESC[1m Generating ESC[22m
+        let raw = b" \x1b[32m\xe2\xa1\x95\xe2\xa1\xb0\x1b[39m \x1b[1mGenerating\x1b[22m";
         assert!(is_busy(raw));
     }
 
     #[test]
-    fn uncolored_bullet_is_not_busy() {
-        // Plain bullet without green color codes should NOT match
-        assert!(!is_busy("  • Generating...".as_bytes()));
+    fn bare_braille_spinner_generating() {
+        assert!(is_busy("⡕⡰ Generating".as_bytes()));
+    }
+
+    // -- Bullet spinner (previous Cursor indicator) --
+
+    #[test]
+    fn bullet_generating() {
+        assert!(is_busy("  • Generating...".as_bytes()));
     }
 
     #[test]
-    fn bare_bullet_in_text_is_not_busy() {
-        assert!(!is_busy("here is a bullet • in text".as_bytes()));
+    fn bullet_with_ansi_generating() {
+        let raw = b"  \x1b[32m\xe2\x80\xa2\x1b[39m \x1b[1mGenerating...\x1b[22m";
+        assert!(is_busy(raw));
     }
 
-    // -- Legacy hexagon indicators --
+    // -- Hexagon spinners (legacy indicator) --
 
     #[test]
     fn legacy_filled_hexagon() {
