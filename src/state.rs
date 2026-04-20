@@ -47,21 +47,31 @@ pub fn run_hook(cmd: &str) {
         .status();
 }
 
-/// Set the tmux user option `@cursor-cli-wrapper-status` on the current session
-/// and run the `[hooks] status-change` command if configured.
+/// Set the tmux user options `@ai-agent-status` and `@ai-agent` on the current
+/// window, and run the `[hooks] status-change` command if configured.
 ///
 /// Silently does nothing for tmux if not running inside tmux.
 pub fn set_tmux_status(value: &str, hook: Option<&str>) {
     if value.is_empty() {
-        // Unset the option so it doesn't linger
+        // Unset the options so they don't linger
         let _ = std::process::Command::new("tmux")
-            .args(["set-option", "-qu", "@cursor-cli-wrapper-status"])
+            .args(["set-option", "-wqu", "@ai-agent-status"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+        let _ = std::process::Command::new("tmux")
+            .args(["set-option", "-wqu", "@ai-agent"])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();
     } else {
         let _ = std::process::Command::new("tmux")
-            .args(["set-option", "-q", "@cursor-cli-wrapper-status", value])
+            .args(["set-option", "-wq", "@ai-agent", "cursor"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+        let _ = std::process::Command::new("tmux")
+            .args(["set-option", "-wq", "@ai-agent-status", value])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();
